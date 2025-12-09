@@ -7,7 +7,7 @@ import { TaskItem } from './components/TaskItem';
 import { StatsCard } from './components/StatsCard';
 import { CalendarView } from './components/CalendarView';
 import { FocusTimer } from './components/FocusTimer';
-import { FinanceView } from './components/FinanceView';
+import { FinanceDashboard } from './components/finance/FinanceDashboard'; // Updated Import
 import { SettingsModal } from './components/SettingsModal';
 import { AuthScreen } from './components/AuthScreen';
 import { Button } from './components/Button';
@@ -28,7 +28,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  // Legacy transactions state removed in favor of FinanceDashboard internal state
   
   // New Task Inputs
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -65,12 +65,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     const userKey = `taskflow_data_${user.id}`;
-    const financeKey = `taskflow_finance_${user.id}`;
     const saved = localStorage.getItem(userKey);
-    const savedFinance = localStorage.getItem(financeKey);
     
     if (saved) { try { setTasks(JSON.parse(saved)); } catch { setTasks([]); } } else { setTasks([]); }
-    if (savedFinance) { try { setTransactions(JSON.parse(savedFinance)); } catch { setTransactions([]); } } else { setTransactions([]); }
 
     const settingsKey = `sloth_settings_${user.id}`;
     const savedSettings = localStorage.getItem(settingsKey);
@@ -82,12 +79,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     localStorage.setItem(`taskflow_data_${user.id}`, JSON.stringify(tasks));
-    localStorage.setItem(`taskflow_finance_${user.id}`, JSON.stringify(transactions));
     localStorage.setItem(`sloth_settings_${user.id}`, JSON.stringify({ soundEnabled, notificationsEnabled }));
-  }, [tasks, transactions, soundEnabled, notificationsEnabled, user]);
+  }, [tasks, soundEnabled, notificationsEnabled, user]);
 
-  const handleLogout = () => { if (window.confirm("Sair?")) { authService.logout(); setUser(null); setTasks([]); setTransactions([]); setActiveView('tasks'); } };
-  const uniqueCategories = useMemo(() => Array.from(new Set(tasks.map(t => t.category).filter((c): c is string => Boolean(c)))), [tasks]);
+  const handleLogout = () => { if (window.confirm("Sair?")) { authService.logout(); setUser(null); setTasks([]); setActiveView('tasks'); } };
 
   const addTask = (e?: React.FormEvent, customDate?: Date, titleOverride?: string) => {
     if (e) e.preventDefault();
@@ -122,7 +117,6 @@ const App: React.FC = () => {
     let finalDueDate = undefined;
     if (voiceResult.data) {
        const parts = voiceResult.data.split('-');
-       // Create date in local time
        finalDueDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 12, 0, 0).getTime();
     }
 
@@ -146,9 +140,6 @@ const App: React.FC = () => {
 
     setTasks(prev => [newTask, ...prev]);
   };
-
-  const addTransaction = (t: Omit<Transaction, 'id'>) => setTransactions(prev => [...prev, { ...t, id: crypto.randomUUID() }]);
-  const deleteTransaction = (id: string) => setTransactions(prev => prev.filter(t => t.id !== id));
 
   const updateTask = (id: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
@@ -189,7 +180,7 @@ const App: React.FC = () => {
 
   const handleToggleNotifications = () => { if (!notificationsEnabled && Notification.permission !== 'granted') { Notification.requestPermission().then(p => setNotificationsEnabled(p === 'granted')); } else { setNotificationsEnabled(!notificationsEnabled); } };
   const handleClearCompleted = () => setTasks(prev => prev.filter(t => !t.completed));
-  const handleResetAll = () => { setTasks([]); setTransactions([]); };
+  const handleResetAll = () => { setTasks([]); };
   const cycleNewTaskPriority = () => setNewTaskPriority(p => p===Priority.Low?Priority.Medium:p===Priority.Medium?Priority.High:Priority.Low);
   const priorityFlagColors = { [Priority.High]: 'text-red-500 fill-red-500', [Priority.Medium]: 'text-amber-500 fill-amber-500', [Priority.Low]: 'text-blue-500 fill-blue-500' };
 
@@ -283,7 +274,9 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {activeView === 'finance' && <FinanceView transactions={transactions} onAddTransaction={addTransaction} onDeleteTransaction={deleteTransaction} />}
+        {/* Updated Finance View */}
+        {activeView === 'finance' && <FinanceDashboard user={user} />}
+        
         {activeView === 'calendar' && <CalendarView tasks={tasks} onAddTask={(title, date) => addTask(undefined, date, title)} />}
         {activeView === 'focus' && <FocusTimer soundEnabled={soundEnabled} notificationsEnabled={notificationsEnabled} />}
         {activeView === 'insights' && <EmotionalDashboard completedTasks={tasks.filter(t => t.completed)} />}
@@ -320,5 +313,4 @@ const App: React.FC = () => {
     </div>
   );
 };
-
 export default App;

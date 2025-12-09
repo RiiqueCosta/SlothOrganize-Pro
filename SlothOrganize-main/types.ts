@@ -37,16 +37,56 @@ export interface User {
   name: string;
 }
 
-export interface Transaction {
+// --- Finance Types ---
+
+export interface FinancialTransaction {
+  id: string;
+  type: "entrada" | "saida";
+  amount: number; // stored in cents (integer)
+  currency: "BRL";
+  description: string;
+  category: string;
+  date: number; // timestamp
+  recurring?: {
+    interval: "monthly" | "weekly" | "yearly";
+    until?: number;
+  };
+  createdAt: number;
+  updatedAt?: number;
+}
+
+export interface MonthlyAggregation {
+  income: number; // cents
+  expense: number; // cents
+  balance: number; // cents
+  byCategory: { [key: string]: number };
+  transactionsCount: number;
+}
+
+export interface YearlyAggregation {
+  months: {
+    month: number;
+    income: number;
+    expense: number;
+    balance: number;
+  }[];
+  totalIncome: number;
+  totalExpense: number;
+  bestMonth: number;
+  worstMonth: number;
+}
+
+// Alias for compatibility with old components until full migration
+export type Transaction = {
   id: string;
   description: string;
-  amount: number;
+  amount: number; // float (legacy components use float)
   type: 'income' | 'expense';
   date: number;
   category?: string;
-}
+};
 
-// AI Response Interfaces
+// --- AI Response Interfaces ---
 
 export interface PrioritizedTaskResult {
   prioritized_tasks: {
