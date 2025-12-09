@@ -19,6 +19,11 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({ onTaskCreated }) => {
 
   const startRecording = async () => {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Seu navegador não suporta gravação de áudio ou está em um contexto não seguro (http).");
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm; codecs=opus' }); // Prefer webm/opus
       mediaRecorderRef.current = mediaRecorder;
@@ -36,9 +41,19 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({ onTaskCreated }) => {
 
       mediaRecorder.start();
       setIsRecording(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error accessing microphone:", err);
-      alert("Não foi possível acessar o microfone.");
+      let message = "Não foi possível acessar o microfone.";
+      
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        message = "Permissão do microfone negada. Por favor, permita o acesso nas configurações do navegador.";
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        message = "Nenhum microfone encontrado. Verifique se o dispositivo está conectado.";
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        message = "O microfone está sendo usado por outro aplicativo.";
+      }
+
+      alert(message);
     }
   };
 
