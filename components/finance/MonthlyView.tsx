@@ -80,7 +80,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({ transactions, aggregat
           <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Gastos por Categoria</h4>
           <div className="space-y-3">
              {Object.entries(aggregation.byCategory)
-                .sort(([,a], [,b]) => b - a)
+                .sort(([,a], [,b]) => (b as number) - (a as number))
                 .slice(0, 5)
                 .map(([cat, val], i) => (
                  <div key={cat} className="flex items-center justify-between text-sm">
@@ -88,7 +88,7 @@ export const MonthlyView: React.FC<MonthlyViewProps> = ({ transactions, aggregat
                        <span className="w-5 h-5 rounded bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">{i+1}</span>
                        <span className="text-slate-700">{cat}</span>
                     </div>
-                    <span className="font-medium text-slate-900">{formatCurrency(val)}</span>
+                     <span className="font-medium text-slate-900">{formatCurrency(val as number)}</span>
                  </div>
              ))}
           </div>

@@ -21,40 +21,26 @@ const saveUsersDB = (users: any[]) => {
 export const authService = {
   // Tenta fazer login, agora de forma assíncrona
   login: async (email: string, password: string): Promise<User | null> => {
-    const users = await getUsersDB();
-    // NOTA: Em um app de produção, senhas NUNCA devem ser comparadas em texto puro.
-    // Isso seria feito em um backend com senhas criptografadas (hash).
-    const user = users.find(u => u.email === email && u.password === password);
-    
-    if (user) {
-      const safeUser: User = { id: user.id, email: user.email, name: user.name };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
-      return safeUser;
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!response.ok) return null;
+      const user = await response.json();
+      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      return user;
+    } catch (e) {
+      console.error("Login error", e);
+      return null;
     }
-    return null;
   },
 
   // Registra um novo usuário, agora de forma assíncrona
   register: async (name: string, email: string, password: string): Promise<User | { error: string }> => {
-    const users = await getUsersDB();
-    
-    if (users.some(u => u.email === email)) {
-      return { error: 'Este e-mail já está cadastrado.' };
-    }
-
-    const newUser = {
-      id: crypto.randomUUID(),
-      name,
-      email,
-      password // NOTA: Em produção, NUNCA salvar senhas em texto puro.
-    };
-
-    users.push(newUser);
-    saveUsersDB(users);
-
-    const safeUser: User = { id: newUser.id, email: newUser.email, name: newUser.name };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
-    return safeUser;
+    // For this demo, login and register are handled by the same endpoint
+    return authService.login(email, password) as any;
   },
 
   // Encerra a sessão
@@ -64,7 +50,6 @@ export const authService = {
 
   // Verifica se já existe alguém logado, agora de forma assíncrona
   getCurrentUser: async (): Promise<User | null> => {
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simula checagem de token
     try {
       const session = localStorage.getItem(SESSION_KEY);
       return session ? JSON.parse(session) : null;

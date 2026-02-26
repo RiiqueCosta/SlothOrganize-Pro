@@ -56,7 +56,19 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkSession = async () => {
       const currentUser = await authService.getCurrentUser();
-      if (currentUser) setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        // Fetch tasks from API
+        try {
+          const response = await fetch(`/api/tasks/${currentUser.id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setTasks(data);
+          }
+        } catch (e) {
+          console.error("Failed to fetch tasks", e);
+        }
+      }
       setIsLoading(false);
     };
     checkSession();
@@ -64,11 +76,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
-    const userKey = `taskflow_data_${user.id}`;
-    const saved = localStorage.getItem(userKey);
-    
-    if (saved) { try { setTasks(JSON.parse(saved)); } catch { setTasks([]); } } else { setTasks([]); }
-
     const settingsKey = `sloth_settings_${user.id}`;
     const savedSettings = localStorage.getItem(settingsKey);
     if (savedSettings) {
@@ -78,13 +85,25 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
-    localStorage.setItem(`taskflow_data_${user.id}`, JSON.stringify(tasks));
     localStorage.setItem(`sloth_settings_${user.id}`, JSON.stringify({ soundEnabled, notificationsEnabled }));
-  }, [tasks, soundEnabled, notificationsEnabled, user]);
+  }, [soundEnabled, notificationsEnabled, user]);
+
+  const syncTask = async (task: Task) => {
+    if (!user) return;
+    try {
+      await fetch(`/api/tasks/${user.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(task),
+      });
+    } catch (e) {
+      console.error("Failed to sync task", e);
+    }
+  };
 
   const handleLogout = () => { if (window.confirm("Sair?")) { authService.logout(); setUser(null); setTasks([]); setActiveView('tasks'); } };
 
-  const addTask = (e?: React.FormEvent, customDate?: Date, titleOverride?: string) => {
+  const addTask = async (e?: React.FormEvent, customDate?: Date, titleOverride?: string) => {
     if (e) e.preventDefault();
     const titleToUse = titleOverride || newTaskTitle;
     if (!titleToUse.trim()) return;
@@ -110,10 +129,11 @@ const App: React.FC = () => {
     };
 
     setTasks(prev => [newTask, ...prev]);
+    syncTask(newTask);
     if (!titleOverride) { setNewTaskTitle(''); setNewTaskDate(''); setNewTaskTime(''); setNewTaskDuration(''); setNewTaskPriority(Priority.Medium); }
   };
 
-  const handleVoiceTask = (voiceResult: VoiceCommandResult) => {
+  const handleVoiceTask = async (voiceResult: VoiceCommandResult) => {
     let finalDueDate = undefined;
     if (voiceResult.data) {
        const parts = voiceResult.data.split('-');
@@ -139,19 +159,78 @@ const App: React.FC = () => {
     };
 
     setTasks(prev => [newTask, ...prev]);
+    syncTask(newTask);
   };
 
   const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    setTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        const updated = { ...t, ...updates };
+        syncTask(updated);
+        return updated;
+      }
+      return t;
+    }));
   };
   
-  const toggleTask = (id: string, feeling?: '😫' | '😐' | '🙂' | '😁') => setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed, completedAt: !t.completed ? Date.now() : undefined, feeling: !t.completed ? feeling : undefined } : t));
-  const snoozeTask = (id: string) => setTasks(prev => prev.map(t => { if (t.id !== id) return t; const d = t.dueDate ? new Date(t.dueDate) : new Date(); d.setDate(d.getDate()+1); return { ...t, dueDate: d.getTime() }; }));
-  const deleteTask = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
+  const toggleTask = (id: string, feeling?: '😫' | '😐' | '🙂' | '😁') => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        const updated: Task = { ...t, completed: !t.completed, completedAt: !t.completed ? Date.now() : undefined, feeling: !t.completed ? feeling : undefined };
+        syncTask(updated);
+        return updated;
+      }
+      return t;
+    }));
+  };
+
+  const snoozeTask = (id: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== id) return t;
+      const d = t.dueDate ? new Date(t.dueDate) : new Date();
+      d.setDate(d.getDate()+1);
+      const updated = { ...t, dueDate: d.getTime() };
+      syncTask(updated);
+      return updated;
+    }));
+  };
+
+  const deleteTask = async (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+    if (!user) return;
+    try {
+      await fetch(`/api/tasks/${user.id}/${id}`, { method: "DELETE" });
+    } catch (e) {
+      console.error("Failed to delete task", e);
+    }
+  };
   
-  const toggleSubtask = (tid: string, sid: string) => setTasks(prev => prev.map(t => t.id !== tid ? t : { ...t, subtasks: t.subtasks.map(s => s.id === sid ? { ...s, completed: !s.completed } : s) }));
-  const addSubtask = (tid: string, title: string) => setTasks(prev => prev.map(t => t.id !== tid ? t : { ...t, subtasks: [...t.subtasks, { id: crypto.randomUUID(), title, completed: false }] }));
-  const deleteSubtask = (tid: string, sid: string) => setTasks(prev => prev.map(t => t.id !== tid ? t : { ...t, subtasks: t.subtasks.filter(s => s.id !== sid) }));
+  const toggleSubtask = (tid: string, sid: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== tid) return t;
+      const updated = { ...t, subtasks: t.subtasks.map(s => s.id === sid ? { ...s, completed: !s.completed } : s) };
+      syncTask(updated);
+      return updated;
+    }));
+  };
+
+  const addSubtask = (tid: string, title: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== tid) return t;
+      const updated = { ...t, subtasks: [...t.subtasks, { id: crypto.randomUUID(), title, completed: false }] };
+      syncTask(updated);
+      return updated;
+    }));
+  };
+
+  const deleteSubtask = (tid: string, sid: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== tid) return t;
+      const updated = { ...t, subtasks: t.subtasks.filter(s => s.id !== sid) };
+      syncTask(updated);
+      return updated;
+    }));
+  };
   
   const handleEnhanceTask = async (task: Task) => { 
     setLoadingAI(task.id); 
